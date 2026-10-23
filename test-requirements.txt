@@ -1,0 +1,2 @@
+# hr_timesheet_sheet needs web_widget_x2many_2d_matrix 20.0, which is not released on OCA/web yet
+odoo-addon-web_widget_x2many_2d_matrix @ git+https://github.com/oros-energy/oca-web.git@20.0#subdirectory=web_widget_x2many_2d_matrix
