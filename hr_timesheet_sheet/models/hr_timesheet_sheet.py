@@ -21,7 +21,7 @@ empty_name = "/"
 class Sheet(models.Model):
     _name = "hr_timesheet.sheet"
     _description = "Timesheet Sheet"
-    _inherit = ["mail.thread", "mail.activity.mixin", "portal.mixin"]
+    _inherit = ["mail.thread", "mail.activity.mixin", "portal.mixin"]  # noqa: RUF012
     _table = "hr_timesheet_sheet"
     _order = "id desc"
     _rec_name = "complete_name"
@@ -67,7 +67,6 @@ class Sheet(models.Model):
     name = fields.Char(compute="_compute_name")
     employee_id = fields.Many2one(
         comodel_name="hr.employee",
-        string="Employee",
         default=lambda self: self._default_employee(),
         required=True,
     )
@@ -119,7 +118,6 @@ class Sheet(models.Model):
     )
     company_id = fields.Many2one(
         comodel_name="res.company",
-        string="Company",
         default=lambda self: self.env.company,
         required=True,
     )
@@ -130,12 +128,9 @@ class Sheet(models.Model):
     )
     department_id = fields.Many2one(
         comodel_name="hr.department",
-        string="Department",
         default=lambda self: self._default_department_id(),
     )
-    reviewer_id = fields.Many2one(
-        comodel_name="hr.employee", string="Reviewer", tracking=True
-    )
+    reviewer_id = fields.Many2one(comodel_name="hr.employee", tracking=True)
     add_line_project_id = fields.Many2one(
         comodel_name="project.project",
         string="Select Project",
@@ -329,11 +324,11 @@ class Sheet(models.Model):
         self.ensure_one()
         res = self.env["res.users"].browse(SUPERUSER_ID)
         if self.review_policy == "hr":
-            res |= self.env.ref("hr.group_hr_user").user_ids
+            res |= self.env.ref("hr.group_hr_user").all_user_ids
         elif self.review_policy == "hr_manager":
-            res |= self.env.ref("hr.group_hr_manager").user_ids
+            res |= self.env.ref("hr.group_hr_manager").all_user_ids
         elif self.review_policy == "timesheet_manager":
-            res |= self.env.ref("hr_timesheet.group_hr_timesheet_approver").user_ids
+            res |= self.env.ref("hr_timesheet.group_hr_timesheet_approver").all_user_ids
         return res
 
     def _get_timesheet_sheet_company(self):
@@ -698,7 +693,7 @@ class Sheet(models.Model):
 
     def clean_timesheets(self, timesheets):
         repeated = timesheets.filtered(
-            lambda t: t.name == empty_name and not t.timesheet_invoice_id
+            lambda t: t.name == empty_name and not t.reinvoice_move_id
         )
         if len(repeated) > 1 and self.id:
             return repeated.merge_timesheets()
@@ -727,9 +722,9 @@ class Sheet(models.Model):
                 continue
             row = next(iter(rows))
             if delete_empty_rows and self._is_add_line(row):
-                check = any([line.unit_amount for line in rows])
+                check = any(line.unit_amount for line in rows)
             else:
-                check = not all([line.unit_amount for line in rows])
+                check = not all(line.unit_amount for line in rows)
             if not check:
                 continue
             row_lines = self.timesheet_ids.filtered(
@@ -739,7 +734,7 @@ class Sheet(models.Model):
                 lambda t: (
                     t.name == empty_name
                     and not t.unit_amount
-                    and not t.timesheet_invoice_id
+                    and not t.reinvoice_move_id
                 )
             ).unlink()
             if self.timesheet_ids != self.timesheet_ids.exists():

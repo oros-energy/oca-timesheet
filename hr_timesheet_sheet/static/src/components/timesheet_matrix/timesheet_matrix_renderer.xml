@@ -10,11 +10,13 @@
         </xpath>
 
         <xpath expr="//tbody//td[@t-foreach]" position="attributes">
-            <attribute name="t-att-class">_getCellClass(column, row.value)</attribute>
+            <attribute
+                name="t-att-class"
+            >this._getCellClass(column, row.value)</attribute>
         </xpath>
 
         <xpath expr="//tfoot//th[@t-foreach]" position="attributes">
-            <attribute name="t-att-class">_getColumnTotalClass(column)</attribute>
+            <attribute name="t-att-class">this._getColumnTotalClass(column)</attribute>
         </xpath>
     </t>
 </templates>

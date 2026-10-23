@@ -19,6 +19,9 @@ from ..models.hr_timesheet_sheet import empty_name
 
 
 class TestHrTimesheetSheetCommon(BaseCommon):
+    # Run as superuser, the tests create their own users with the login test_user
+    _test_user_groups = ()
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -178,7 +181,7 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
         self.assertEqual(len(sheet_form.timesheet_ids), 1)
         self.assertEqual(len(sheet_form.line_ids), 7)
         self.assertFalse(
-            any([line.get("unit_amount") for line in sheet_form.line_ids._records])
+            any(line.get("unit_amount") for line in sheet_form.line_ids._records)
         )
         timesheet = sheet_form.timesheet_ids._records[0]
         self.assertEqual(timesheet.get("unit_amount"), 0)
@@ -188,7 +191,7 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
         self.assertEqual(len(sheet_form.timesheet_ids), 1)
         self.assertEqual(len(sheet_form.line_ids), 7)
         self.assertTrue(
-            any([line.get("unit_amount") for line in sheet_form.line_ids._records])
+            any(line.get("unit_amount") for line in sheet_form.line_ids._records)
         )
 
         sheet = sheet_form.save()
@@ -268,10 +271,12 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
         self.assertEqual(len(sheet.line_ids), 7)
         self.assertEqual(len(sheet.timesheet_ids), 1)
 
-        with Form(sheet.with_user(self.user)) as sheet_form:
-            with sheet_form.line_ids.edit(0) as line_form:
-                line_form.unit_amount = 2.0
-                self.assertEqual(len(sheet.new_line_ids), 1)
+        with (
+            Form(sheet.with_user(self.user)) as sheet_form,
+            sheet_form.line_ids.edit(0) as line_form,
+        ):
+            line_form.unit_amount = 2.0
+            self.assertEqual(len(sheet.new_line_ids), 1)
         line = next(iter(sheet.line_ids))
         self.assertEqual(line.unit_amount, 2.0)
         self.assertEqual(len(sheet.timesheet_ids), 1)
@@ -667,14 +672,16 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
             }
         )
         sheet = Form(self.sheet_model.with_user(self.user)).save()
-        with self.assertRaises(ValidationError):
-            with Form(sheet.with_user(self.user)) as sheet_form:
-                with self.assertRaises(AssertionError):
-                    sheet_form.company_id = self.user_2.company_id.id
-                with self.assertRaises(AssertionError):
-                    sheet_form.department_id = department_2
-                sheet_form.add_line_project_id = project_3
-                sheet_form.add_line_task_id = task_3
+        with (
+            self.assertRaises(ValidationError),
+            Form(sheet.with_user(self.user)) as sheet_form,
+        ):
+            with self.assertRaises(AssertionError):
+                sheet_form.company_id = self.user_2.company_id.id
+            with self.assertRaises(AssertionError):
+                sheet_form.department_id = department_2
+            sheet_form.add_line_project_id = project_3
+            sheet_form.add_line_task_id = task_3
 
     @mute_logger("odoo.models.unlink")
     def test_9(self):
@@ -946,10 +953,12 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
 
         # testing write
         sheet = Form(self.sheet_model.with_user(self.user)).save()
-        with self.assertRaises(UserError):
-            with Form(sheet.with_user(self.user)) as sheet_form:
-                sheet_form.employee_id = self.employee_no_user
-                sheet_form.save()
+        with (
+            self.assertRaises(UserError),
+            Form(sheet.with_user(self.user)) as sheet_form,
+        ):
+            sheet_form.employee_id = self.employee_no_user
+            sheet_form.save()
 
     @mute_logger("odoo.models.unlink")
     def test_workflow(self):
@@ -1004,6 +1013,26 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
         sheet.unlink()
         self.assertFalse(sheet.exists())
 
+    def test_reviewers_with_implied_group(self):
+        hr_manager = new_test_user(
+            self.env,
+            login="test_hr_manager",
+            groups="hr.group_hr_manager",
+            company_id=self.company.id,
+        )
+        timesheet_manager = new_test_user(
+            self.env,
+            login="test_timesheet_manager",
+            groups="hr_timesheet.group_timesheet_manager",
+            company_id=self.company.id,
+        )
+        sheet = Form(self.sheet_model.with_user(self.user)).save()
+        self.assertIn(hr_manager, sheet._get_possible_reviewers())
+        self.assertIn(timesheet_manager, sheet._get_possible_reviewers())
+        sheet.review_policy = "timesheet_manager"
+        self.assertIn(timesheet_manager, sheet._get_possible_reviewers())
+        self.assertNotIn(hr_manager, sheet._get_possible_reviewers())
+
     def test_same_week_different_years(self):
         sheet_form = Form(self.sheet_model.with_user(self.user))
         sheet_form.date_start = date(2019, 12, 30)
@@ -1030,7 +1059,8 @@ class TestHrTimesheetSheet(TestHrTimesheetSheetCommon):
             }
         )
         with Form(sheet) as sheet_form:
-            aal2 = aal1.copy()
+            # copy() appends " (copy)" to the name, keep the empty name to merge
+            aal2 = aal1.copy({"name": empty_name})
             sheet_form.save()
             sheet_form.add_line_project_id = self.project_1
             self.assertTrue(aal1.exists())
